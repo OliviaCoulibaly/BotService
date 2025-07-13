@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -43,19 +43,18 @@ def create_access_token(
 
 def verify_token(token: str) -> Optional[Dict[str, Any]]:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return None
 
 
 # ---------- Misc helpers ---------- #
-def keywords_to_json(keywords: List[str] | None) -> str:
-    """Kept for backward‑compat if you still store keywords as TEXT."""
+def keywords_to_json(keywords: Union[List[str], None]) -> str:
+    """Convertit une liste de mots-clés en JSON (texte)."""
     return json.dumps(keywords or [])
 
 
-def json_to_keywords(json_str: str | None) -> List[str]:
+def json_to_keywords(json_str: Union[str, None]) -> List[str]:
     try:
         return json.loads(json_str or "[]")
     except json.JSONDecodeError:
@@ -75,7 +74,10 @@ def format_datetime(dt: datetime) -> str:
 
 
 def calculate_response_time(messages: List[Dict]) -> float:
-    """Average assistant response time (minutes) in a conversation history list."""
+    """
+    Calcule le temps moyen de réponse (en minutes) de l'assistant
+    dans un historique de conversation.
+    """
     if len(messages) < 2:
         return 0.0
     response_times = []
@@ -88,7 +90,7 @@ def calculate_response_time(messages: List[Dict]) -> float:
                 t1 = datetime.fromisoformat(messages[i - 1]["timestamp"])
                 t2 = datetime.fromisoformat(messages[i]["timestamp"])
                 response_times.append((t2 - t1).total_seconds() / 60)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 continue
     return sum(response_times) / len(response_times) if response_times else 0.0
 
@@ -110,9 +112,15 @@ def get_stats_by_urgency(classifications: List[Dict]) -> Dict[str, int]:
 
 
 def is_agent(token: str, db: Session) -> bool:
-    """Returns True if the token belongs to a user flagged as agent."""
+    """
+    Vérifie si le token appartient à un utilisateur agent.
+    Retourne False si invalide ou utilisateur non trouvé.
+    """
     data = verify_token(token)
     if not data:
         return False
-    user = db.query(User).filter(User.id == data.get("user_id")).first()
+    user_id = data.get("user_id")
+    if not user_id:
+        return False
+    user = db.query(User).filter(User.id == user_id).first()
     return bool(user and user.is_agent)

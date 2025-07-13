@@ -1,22 +1,26 @@
-"""Configuration centrale du backend Smart Support."""
+"""Configuration centrale du backend Smart Support."""
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
+from typing import Generator
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.models import Base  # Base est défini dans backend/src/models.py
+from src.models import Base  # Base = declarative_base() dans models.py
 
 # --------------------------------------------------------------------------- #
 # Base de données
 # --------------------------------------------------------------------------- #
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./smart_support.db")
+DEFAULT_SQLITE_PATH = Path(__file__).parent.parent / "smart_support.db"
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_SQLITE_PATH}")
 
 engine = create_engine(
     DATABASE_URL,
     future=True,
-    echo=False,  # passe à True si tu veux voir les requêtes SQL
+    echo=os.getenv("DEBUG_SQL", "false").lower() == "true",
     connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
 )
 
@@ -24,12 +28,12 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, futu
 
 
 def create_tables() -> None:
-    """Crée toutes les tables (noop si elles existent déjà)."""
+    """Crée toutes les tables SQL (noop si déjà créées)."""
     Base.metadata.create_all(bind=engine)
 
 
-def get_db():
-    """Yield‑based DB session (FastAPI dépendance)."""
+def get_db() -> Generator:
+    """Session DB utilisable avec Depends() dans FastAPI."""
     db = SessionLocal()
     try:
         yield db
@@ -41,9 +45,9 @@ def get_db():
 # FastAPI / CORS
 # --------------------------------------------------------------------------- #
 API_CONFIG = {
-    "title": "Smart Support – Backend API",
+    "title": "Smart Support – Backend API",
     "version": "1.0.0",
-    "description": "API backend pour le système Smart Support",
+    "description": "API backend pour le système Smart Support",
 }
 
 CORS_CONFIG = {
@@ -57,17 +61,23 @@ CORS_CONFIG = {
     "allow_headers": ["*"],
 }
 
+
 # --------------------------------------------------------------------------- #
 # JWT
 # --------------------------------------------------------------------------- #
+SECRET_KEY = os.getenv("SMART_SUPPORT_SECRET_KEY", "CHANGE_ME_IN_PRODUCTION")
+if SECRET_KEY == "CHANGE_ME_IN_PRODUCTION":
+    print("[⚠️ AVERTISSEMENT] La clé secrète SMART_SUPPORT_SECRET_KEY n’a pas été définie !")
+
 JWT_CONFIG = {
-    "secret_key": os.getenv("SMART_SUPPORT_SECRET_KEY", "CHANGE_ME_IN_PRODUCTION"),
+    "secret_key": SECRET_KEY,
     "algorithm": "HS256",
     "access_token_expire_minutes": 30,
 }
 
+
 # --------------------------------------------------------------------------- #
-# Service LLM (si tu veux centraliser l’URL ici)
+# Service LLM
 # --------------------------------------------------------------------------- #
 LLM_API_CONFIG = {
     "base_url": os.getenv("LLM_API_URL", "http://localhost:8001"),

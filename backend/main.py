@@ -1,20 +1,16 @@
-"""Smart Support – Backend API"""
+"""Smart Support – Backend API"""
 
 from __future__ import annotations
 
 from typing import List
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from configs import API_CONFIG, CORS_CONFIG, create_tables, get_db
-from src.models import (
-    Message,
-    Session as SessionModel,
-    User,
-)
+from src.models import Message, Session as SessionModel, User
 from src.schemas import (
     ClassificationResponse,
     DashboardStatsResponse,
@@ -44,12 +40,11 @@ from src.utils import (
 app = FastAPI(**API_CONFIG)
 app.add_middleware(CORSMiddleware, **CORS_CONFIG)
 security = HTTPBearer()
-
-# Crée les tables au démarrage (SQLite/PostgreSQL…)
 create_tables()
 
+
 # --------------------------------------------------------------------------- #
-# Dépendance : utilisateur courant
+# Auth & sécurité
 # --------------------------------------------------------------------------- #
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -57,23 +52,21 @@ def get_current_user(
 ) -> User:
     token_data = verify_token(credentials.credentials)
     if not token_data:
-        raise HTTPException(status_code=401, detail="Token invalide")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalide")
 
     user = db.query(User).filter(User.id == token_data.get("user_id")).first()
     if not user:
-        raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
-
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utilisateur non trouvé")
     return user
 
 
 # --------------------------------------------------------------------------- #
 # Auth
 # --------------------------------------------------------------------------- #
-@app.post("/auth/register", response_model=UserResponse, status_code=201)
+@app.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == user_data.username).first():
         raise HTTPException(status_code=400, detail="Nom d'utilisateur déjà pris")
-
     if db.query(User).filter(User.email == user_data.email).first():
         raise HTTPException(status_code=400, detail="Email déjà utilisé")
 
@@ -106,7 +99,7 @@ def read_current_user(current_user: User = Depends(get_current_user)):
 # --------------------------------------------------------------------------- #
 # Sessions
 # --------------------------------------------------------------------------- #
-@app.post("/sessions", response_model=SessionResponse, status_code=201)
+@app.post("/sessions", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
 def create_session(
     session_data: SessionCreate,
     current_user: User = Depends(get_current_user),
@@ -130,11 +123,10 @@ def retrieve_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    session = (
-        db.query(SessionModel)
-        .filter(SessionModel.id == session_id, SessionModel.user_id == current_user.id)
-        .first()
-    )
+    session = db.query(SessionModel).filter(
+        SessionModel.id == session_id,
+        SessionModel.user_id == current_user.id
+    ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session non trouvée")
     return session
@@ -148,7 +140,7 @@ def end_session(
 ):
     manager = SessionManager(db)
     if not manager.end_session(session_id, current_user.id):
-        raise HTTPException(status_code=404, detail="Session non trouvée")
+        raise HTTPException(status_code=404, detail="Session non trouvée ou déjà terminée")
     return {"message": "Session terminée"}
 
 
@@ -158,11 +150,10 @@ def classify_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    session = (
-        db.query(SessionModel)
-        .filter(SessionModel.id == session_id, SessionModel.user_id == current_user.id)
-        .first()
-    )
+    session = db.query(SessionModel).filter(
+        SessionModel.id == session_id,
+        SessionModel.user_id == current_user.id
+    ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session non trouvée")
 
@@ -176,18 +167,17 @@ def classify_session(
 # --------------------------------------------------------------------------- #
 # Messages
 # --------------------------------------------------------------------------- #
-@app.post("/messages", response_model=MessageResponse, status_code=201)
+@app.post("/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
 def send_message(
     session_id: int,
     message_data: MessageCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    session = (
-        db.query(SessionModel)
-        .filter(SessionModel.id == session_id, SessionModel.user_id == current_user.id)
-        .first()
-    )
+    session = db.query(SessionModel).filter(
+        SessionModel.id == session_id,
+        SessionModel.user_id == current_user.id
+    ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session non trouvée")
 
@@ -204,11 +194,10 @@ def list_session_messages(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    session = (
-        db.query(SessionModel)
-        .filter(SessionModel.id == session_id, SessionModel.user_id == current_user.id)
-        .first()
-    )
+    session = db.query(SessionModel).filter(
+        SessionModel.id == session_id,
+        SessionModel.user_id == current_user.id
+    ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session non trouvée")
 
@@ -221,11 +210,12 @@ def list_session_messages(
 
 
 # --------------------------------------------------------------------------- #
-# Dashboard / Agents
+# Dashboard / Agents
 # --------------------------------------------------------------------------- #
 @app.get("/classifications", response_model=List[ClassificationResponse])
 def list_classifications(
-    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     if not current_user.is_agent:
         raise HTTPException(status_code=403, detail="Accès réservé aux agents")
@@ -235,7 +225,8 @@ def list_classifications(
 
 @app.get("/stats", response_model=DashboardStatsResponse)
 def dashboard_stats(
-    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     if not current_user.is_agent:
         raise HTTPException(status_code=403, detail="Accès réservé aux agents")
@@ -245,7 +236,6 @@ def dashboard_stats(
     total_sessions = db.query(SessionModel).count()
     active_sessions = manager.get_active_sessions_count()
     total_messages = db.query(Message).count()
-
     classifications = manager.get_all_classifications()
 
     return {
@@ -266,17 +256,16 @@ def dashboard_stats(
 
 
 # --------------------------------------------------------------------------- #
-# Root – Healthcheck
+# Root – Healthcheck
 # --------------------------------------------------------------------------- #
 @app.get("/")
 def root():
-    return {"message": "Smart Support Backend API", "status": "running"}
+    return {"message": "Smart Support Backend API", "status": "running"}
 
 
 # --------------------------------------------------------------------------- #
-# Dev server
+# Dev server
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":  # pragma: no cover
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)

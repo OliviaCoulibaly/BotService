@@ -23,6 +23,7 @@ class SmartSupportChain:
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
+            print(f"[ERROR] Appel API échoué: {e}")
             return f"Erreur API: {str(e)}"
     
     def generate_response(self, user_message: str, history: List[Dict] = None) -> str:
@@ -44,10 +45,11 @@ class SmartSupportChain:
         response = self._call_api(messages, temp=0.3)
         try:
             return json.loads(response)
-        except:
+        except Exception as e:
+            print(f"[WARNING] Erreur JSON classification: {e}")
             return {
-                "category": "Support général",
-                "urgency": "Moyen", 
+                "category": "autre",
+                "urgency": "moyen", 
                 "summary": "Classification automatique",
                 "keywords": ["support"]
             }
@@ -64,5 +66,6 @@ class SmartSupportChain:
         response = self._call_api(messages, temp=0.2)
         try:
             return json.loads(response)
-        except:
+        except Exception as e:
+            print(f"[WARNING] Erreur JSON extraction: {e}")
             return {}

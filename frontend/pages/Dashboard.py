@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Dict
 
 import pandas as pd
 import plotly.express as px
@@ -48,7 +48,7 @@ def authenticate_admin() -> bool:
     return False
 
 
-def api_get(endpoint: str, token: str, **kwargs) -> requests.Response:  # pragma: no cover
+def api_get(endpoint: str, token: str, **kwargs) -> requests.Response:
     headers = {"Authorization": f"Bearer {token}"}
     return requests.get(f"{API_BASE_URL}{endpoint}", headers=headers, **kwargs)
 
@@ -56,7 +56,7 @@ def api_get(endpoint: str, token: str, **kwargs) -> requests.Response:  # pragma
 # --------------------------------------------------------------------------- #
 # Data loaders
 # --------------------------------------------------------------------------- #
-def get_classifications(token: str) -> List[dict]:
+def get_classifications(token: str) -> List[Dict]:
     try:
         resp = api_get("/classifications", token, timeout=10)
         if resp.status_code == 200:
@@ -73,18 +73,25 @@ def get_classifications(token: str) -> List[dict]:
 # --------------------------------------------------------------------------- #
 # Charts & metrics helpers
 # --------------------------------------------------------------------------- #
-def apply_period_filter(data: list[dict], period: str) -> list[dict]:
+def apply_period_filter(data: List[Dict], period: str) -> List[Dict]:
     if period == "Tout" or not data:
         return data
+
+    for item in data:
+        if "created_at" not in item:
+            item["created_at"] = item.get("classified_at")
+
     df = pd.DataFrame(data)
     df["created_at"] = pd.to_datetime(df["created_at"])
     now = datetime.now()
+
     if period == "Aujourd'hui":
         df = df[df["created_at"].dt.date == now.date()]
     elif period == "7 derniers jours":
         df = df[df["created_at"] >= now - timedelta(days=7)]
     elif period == "30 derniers jours":
         df = df[df["created_at"] >= now - timedelta(days=30)]
+
     return df.to_dict("records")
 
 
@@ -123,7 +130,8 @@ def timeline(df: pd.DataFrame):
 def recent_table(df: pd.DataFrame):
     st.subheader("📋 Demandes récentes")
     display_df = df.sort_values("created_at", ascending=False).head(10)
-    st.dataframe(display_df[["session_id", "category", "urgency", "created_at"]], use_container_width=True)
+    display_df["Date"] = display_df["created_at"].dt.strftime("%d/%m/%Y %H:%M")
+    st.dataframe(display_df[["session_id", "category", "urgency", "Date"]], use_container_width=True)
 
 
 # --------------------------------------------------------------------------- #

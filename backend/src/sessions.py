@@ -1,4 +1,4 @@
-# sessions.py corrigé – Appels au micro-service LLM sur http://localhost:8001
+# sessions.py – Appels au micro-service LLM sur http://localhost:8001
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from .utils import generate_session_title, keywords_to_json
 
 # URL du micro-service LLM
 LLM_API_URL = "http://localhost:8001"
+
 
 class SessionManager:
     def __init__(self, db: Session):
@@ -52,8 +53,9 @@ class SessionManager:
     def add_message(self, session_id: int, message_data: MessageCreate) -> Message:
         session = self.db.query(SessionModel).filter(SessionModel.id == session_id).first()
         if not session or not session.is_active:
-            raise ValueError("Session non trouvée ou inactive")
+            raise ValueError("Session non trouvée ou inactive.")
 
+        # Ajout du message utilisateur
         user_message = Message(
             session_id=session_id,
             role=RoleEnum(message_data.role),
@@ -64,6 +66,7 @@ class SessionManager:
         if message_data.role == "user":
             history = self._get_conversation_history(session_id)
             assistant_content = self._call_llm_api(message_data.content, history)
+
             assistant_message = Message(
                 session_id=session_id,
                 role=RoleEnum.ASSISTANT,
@@ -142,16 +145,30 @@ class SessionManager:
 
     def _call_llm_api(self, prompt: str, history: List[Dict]) -> str:
         try:
+            messages = [
+                {"role": "system", "content": (
+                    "Tu es SmartSupport, un assistant client virtuel intelligent. "
+                    "Tu dois être clair, courtois, professionnel et répondre en français. "
+                    "Si la question n’a pas de sens ou est hors sujet, réponds poliment que tu ne peux pas aider."
+                )},
+                *[
+                    {"role": m["role"], "content": m["content"]}
+                    for m in history
+                ],
+                {"role": "user", "content": prompt},
+            ]
+
             resp = requests.post(
                 f"{LLM_API_URL}/chats",
-                json={"message": prompt, "conversation_history": history},
+                json={"message": prompt, "conversation_history": messages},
                 timeout=30,
             )
             if resp.status_code == 200:
-                return resp.json().get("response", "")
-            return "Je rencontre une difficulté technique. Pouvez-vous reformuler ?"
+                data = resp.json()
+                return data.get("response") or "Réponse vide du service IA."
+            return "Je rencontre une difficulté technique. Veuillez réessayer plus tard."
         except Exception as exc:
-            return f"Erreur de connexion au service IA : {exc}"
+            return f"Erreur de connexion au service IA : {str(exc)}"
 
     def _classify_session(self, session_id: int) -> Optional[Classification]:
         history = self._get_conversation_history(session_id)
@@ -180,5 +197,5 @@ class SessionManager:
             self.db.refresh(classification)
             return classification
         except Exception as exc:
-            print(f"[Classification] {exc}")
+            print(f"[Classification] Erreur : {exc}")
             return None

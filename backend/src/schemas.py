@@ -1,4 +1,4 @@
-"""Pydantic schemas for Smart Support"""
+""""Pydantic schemas for Smart Support"""
 
 from __future__ import annotations
 
@@ -10,19 +10,30 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 # ---------- User ---------- #
 class UserCreate(BaseModel):
-    username: Annotated[str, Field(strip_whitespace=True, min_length=3, max_length=50)]
-    email: EmailStr
-    password: Annotated[str, Field(min_length=6, max_length=128)]
+    username: Annotated[
+        str,
+        Field(
+            strip_whitespace=True,
+            min_length=3,
+            max_length=50,
+            example="john_doe"
+        )
+    ]
+    email: EmailStr = Field(..., example="john@example.com")
+    password: Annotated[
+        str,
+        Field(min_length=6, max_length=128, example="securePassword123")
+    ]
 
-    @field_validator("username")
+    @field_validator("username", mode="before")
     @classmethod
-    def strip_username(cls, v: str) -> str:
+    def strip_and_validate_username(cls, v: str) -> str:
         return v.strip()
 
 
 class UserLogin(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., example="john_doe")
+    password: str = Field(..., example="securePassword123")
 
 
 class UserResponse(BaseModel):
@@ -37,7 +48,7 @@ class UserResponse(BaseModel):
 
 # ---------- Session ---------- #
 class SessionCreate(BaseModel):
-    title: Optional[str] = "Nouvelle conversation"
+    title: Optional[str] = Field(default="Nouvelle conversation", example="Demande de prêt logement")
 
 
 class SessionResponse(BaseModel):
@@ -52,8 +63,8 @@ class SessionResponse(BaseModel):
 
 # ---------- Message ---------- #
 class MessageCreate(BaseModel):
-    content: str
-    role: Literal["user", "assistant"] = "user"
+    content: str = Field(..., example="Bonjour, j'aimerais avoir des informations sur un crédit.")
+    role: Literal["user", "assistant"] = Field(default="user", example="user")
 
 
 class MessageResponse(BaseModel):
@@ -68,10 +79,10 @@ class MessageResponse(BaseModel):
 
 # ---------- Classification ---------- #
 class ClassificationCreate(BaseModel):
-    category: str
-    urgency: str
-    summary: Optional[str] = None
-    keywords: Optional[List[str]] = None
+    category: str = Field(..., example="Crédit")
+    urgency: str = Field(..., example="Haute")
+    summary: Optional[str] = Field(default=None, example="Demande urgente de crédit personnel.")
+    keywords: Optional[List[str]] = Field(default=None, example=["crédit", "urgent", "prêt"])
 
 
 class ClassificationResponse(BaseModel):
@@ -98,8 +109,8 @@ class SessionWithClassification(SessionResponse):
 
 # ---------- Auth ---------- #
 class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+    access_token: str = Field(..., example="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
+    token_type: str = Field(default="bearer", example="bearer")
 
 
 # ---------- Stats ---------- #

@@ -4,8 +4,11 @@
 
 import re
 import json
+import logging
 from datetime import datetime
 from typing import Dict, List
+
+logger = logging.getLogger(__name__)
 
 def clean_text(text: str) -> str:
     """Nettoie un texte"""
@@ -23,7 +26,7 @@ def format_conversation(messages: List[Dict]) -> str:
         for msg in messages
     ])
 
-def extract_keywords(text: str) -> List[str]:
+def extract_keywords(text: str, max_keywords: int = 10) -> List[str]:
     """Extrait des mots-clés simples"""
     if not text:
         return []
@@ -31,11 +34,14 @@ def extract_keywords(text: str) -> List[str]:
     stop_words = {'les', 'des', 'une', 'pour', 'avec', 'dans', 'sur', 'que', 'qui'}
     words = re.findall(r'\b\w{4,}\b', text.lower())
     
-    return [w for w in set(words) if w not in stop_words][:10]
+    return [w for w in set(words) if w not in stop_words][:max_keywords]
 
 def validate_classification(data: Dict) -> Dict:
     """Valide une classification retournée par l'IA"""
-    categories = ["Problème technique", "Demande d'information", "Facturation", "Support général", "Réclamation"]
+    categories = [
+        "Problème technique", "Demande d'information", "Facturation",
+        "Gestion de compte", "Livraison", "Réclamation", "Autre", "Support général"
+    ]
     urgencies = ["Faible", "Moyen", "Urgent"]
 
     category = data.get("category", "").strip()
@@ -55,14 +61,14 @@ def safe_json_parse(text: str) -> Dict:
     """Tente de parser du JSON même si la réponse est bruitée"""
     try:
         return json.loads(text)
-    except:
-        # Tente d'extraire un bloc JSON valide
+    except Exception as e:
+        logger.warning(f"Échec parsing JSON direct: {e}")
         match = re.search(r'\{.*?\}', text, re.DOTALL)
         if match:
             try:
                 return json.loads(match.group())
-            except:
-                pass
+            except Exception as e2:
+                logger.warning(f"Échec parsing JSON partiel: {e2}")
         return {}
 
 def get_timestamp() -> str:
